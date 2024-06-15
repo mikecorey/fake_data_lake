@@ -1,11 +1,35 @@
 from io import BytesIO
-from flask import Flask, request, jsonify, send_file
+import datetime
+from functools import wraps
+
+from flask import Flask, request, jsonify, send_file, make_response
+import jwt
 
 from fake_data_lake import FakeDataLake
 
 app = Flask(__name__)
+app.config['SECRET_KEY'] = 'mah_seekrit'
 
 fdl = FakeDataLake()
+
+
+def require_auth(role=None):
+    def decorator(f):
+        @wraps(f)
+        def wrapper(*args, **kwargs):
+            token = request.headers.get('Authorization').split()[1]
+            if not token:
+                return jsonify({'error': 'Missing authorization header.'}), 401
+            try:
+                payload = jwt.decode(token, app.config['SECRET_KEY'], algorithms=['HS256'])
+                if role and role not in payload['roles']:
+                    return jsonify({'error': 'Not Authorized. (lacking role.)'}), 401
+            except Exception as e:
+                print(e)
+                return jsonify({'error': 'Invalid token.'}), 401
+            return f(*args, **kwargs)
+        return wrapper
+    return decorator
 
 
 @app.route('/')
@@ -16,6 +40,32 @@ def index():
         s += "<a href='/d/" + key + "'>" + key + "</a><br>"
     s += "</BODY></HTML>"
     return s
+
+@app.route('/login')
+def login():
+    auth = request.authorization
+    if auth and auth.username == 'admin' and auth.password == 'secret':
+        print(app.config['SECRET_KEY'])
+        payload = {
+            'user': auth.username,
+            'roles': ['king', 'space_janitor'],
+            'exp': datetime.datetime.utcnow() + datetime.timedelta(minutes=15)
+        }
+        token = jwt.encode(payload, app.config['SECRET_KEY'], algorithm='HS256')
+        return jsonify({'token': token})
+    return make_response('Bad username or password.', 401, {'WWW-Authenticate': 'Basic realm="Login Required"'})
+
+
+@app.route('/seekrit')
+@require_auth(None)
+def seekrit():
+    return "You are in the seekrit area."
+
+
+@app.route('/space_janitors_only')
+@require_auth('space_janitor')
+def space_janitors_only():
+    return "Roger Wilco."
 
 
 @app.route('/create', methods=['POST'])
