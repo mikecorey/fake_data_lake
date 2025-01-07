@@ -12,3 +12,4 @@ There are also two test scripts, test_app.py which is for testing the flask app 
 The fake data lake includes a command line for uploading files via the command line.  To use it on the included test files, run:
 
 `python fake_data_lake_cli.py test_raw.bin meta.json`
+
